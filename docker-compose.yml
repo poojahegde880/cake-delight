@@ -1,0 +1,152 @@
+
+services:
+
+  # MongoDB
+  mongo:
+    image: mongo:8
+    container_name: cake-delight-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: cake-delight-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Cake Catalog Service
+  catalog-service:
+    build: ./backend/catalog-service
+    container_name: cake-catalog-service
+    restart: unless-stopped
+    environment:
+      PORT: 8001
+      MONGO_URI: mongodb://mongo:27017/cake_catalog
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Order Service
+  order-service:
+    build: ./backend/order-service
+    container_name: cake-order-service
+    restart: unless-stopped
+    environment:
+      PORT: 8002
+      MONGO_URI: mongodb://mongo:27017/cake_orders
+      CATALOG_SERVICE_URL: http://catalog-service:8001
+      RABBITMQ_URL: amqp://rabbitmq:5672
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8002/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Rating Service
+  rating-service:
+    build: ./backend/rating-service
+    container_name: cake-rating-service
+    restart: unless-stopped
+    environment:
+      PORT: 8003
+      MONGO_URI: mongodb://mongo:27017/cake_ratings
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8003/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Notification Service
+  notification-service:
+    build: ./backend/notification-service
+    container_name: cake-notification-service
+    restart: unless-stopped
+    env_file:
+      - ./backend/notification-service/.env
+    environment:
+      PORT: 8004
+      MONGO_URI: mongodb://mongo:27017/cake_notifications
+      RABBITMQ_URL: amqp://rabbitmq:5672
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8004/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build: ./backend/api-gateway
+    container_name: cake-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      CATALOG_SERVICE_URL: http://catalog-service:8001
+      ORDER_SERVICE_URL: http://order-service:8002
+      RATING_SERVICE_URL: http://rating-service:8003
+      NOTIFICATION_SERVICE_URL: http://notification-service:8004
+    depends_on:
+      catalog-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      rating-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cake-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

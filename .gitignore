@@ -1,0 +1,28 @@
+# Kubernetes secrets
+k8s/secret.yaml
+k8s/rabbitmq-secret.yaml
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+
+# Logs
+*.log
+
+# RabbitMQ backups and runtime data
+rabbitmq-data-backup/
+rabbitmq-data-backup.tar.gz
+rabbitmq-definitions-backup.json
+deployment-backups/
