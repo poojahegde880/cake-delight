@@ -1,3 +1,4 @@
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -36,6 +37,18 @@ spec:
           volumeMounts:
             - name: mongo-storage
               mountPath: /data/db
+
+          startupProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+
           readinessProbe:
             exec:
               command:
@@ -43,10 +56,10 @@ spec:
                 - --quiet
                 - --eval
                 - "db.adminCommand('ping')"
-            initialDelaySeconds: 15
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
             failureThreshold: 3
+
       volumes:
         - name: mongo-storage
           persistentVolumeClaim:
